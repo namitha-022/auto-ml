@@ -1,0 +1,21 @@
+# Virtual environments
+venv/
+venv311/
+.env/
+.env311/
+
+# Python git rebase origin/main
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Torch / ONNX artifacts
+models/
+*.pt
+*.onnx
+
+# OS / editor junk
+.DS_Store
+.vscode/

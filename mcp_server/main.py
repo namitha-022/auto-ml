@@ -1,10 +1,11 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from mcp_server.context import create_model_context
-from mcp_server.analyzer import analyze_bottleneck, analyze_bottlenecks
+from profiler import profile_model
 
-import uuid
-import json
-import os
+@app.post("/run-profile")
+def run_profile(model_context: dict):
+    results = profile_model(model_context)
+    return results
 
 app = FastAPI()
 
