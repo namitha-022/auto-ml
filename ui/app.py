@@ -34,7 +34,21 @@ if uploaded_file is not None:
         )
 
         if response.status_code == 200:
-            st.json(response.json())
+            result = response.json()
+
+            st.subheader("Model Context")
+            st.json({
+                "model_name": result["model_name"],
+                "params": result["params"],
+                "input_shape": result["input_shape"]
+            })
+
+            st.subheader("ONNX Conversion Status")
+
+            if result.get("onnx_exported"):
+                st.success("ONNX export successful")
+            else:
+                st.warning("ONNX export failed")
         else:
             st.error("Failed to process model")
 
