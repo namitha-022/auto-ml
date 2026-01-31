@@ -1,40 +1,42 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from mcp_server.context import create_model_context
-from mcp_server.profiler import profile_model
-from mcp_server.analyzer import analyze_bottleneck, analyze_bottlenecks
-import uuid
+import torch
+import tempfile
+import os
+
+from context import ModelContext
 
 app = FastAPI()
 
-
-
-
-# In-memory storage for profiling results (for demo purposes)
-PROFILE_RESULTS = {}
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-
 @app.post("/upload-model")
 async def upload_model(
-    file: UploadFile = File(...),
+    model: UploadFile = File(...),
     input_shape: str = Form(...)
 ):
-    model_context = create_model_context(file, input_shape)
-    return model_context
+    # Save model temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pt") as tmp:
+        tmp.write(await model.read())
+        model_path = tmp.name
 
+    # Load PyTorch model
+    loaded_model = torch.load(model_path, map_location="cpu")
+    loaded_model.eval()
 
-@app.post("/run-profile")
-async def run_profile(model_context: dict):
-    """Profile a model with the given context"""
-    results = profile_model(model_context)
-    return results
+    # Model name (best-effort)
+    model_name = loaded_model.__class__.__name__
 
+    # Parameter count
+    param_count = sum(p.numel() for p in loaded_model.parameters())
 
-@app.post("/analyze")
-async def analyze(profile_results: list):
-    """Direct analysis endpoint for profiling results"""
-    return analyze_bottlenecks(profile_results)
+    # Parse input shape
+    input_shape_list = [int(x.strip()) for x in input_shape.split(",")]
+
+    context = ModelContext(
+        model_name=model_name,
+        param_count=param_count,
+        input_shape=input_shape_list
+    )
+
+    os.remove(model_path)
+
+    return context.to_dict()
+
