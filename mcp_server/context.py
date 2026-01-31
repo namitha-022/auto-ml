@@ -14,7 +14,7 @@ def create_model_context(file, input_shape):
         f.write(file.file.read())
 
     # Load model
-    model = torch.load(model_path, map_location="cpu")
+    model = torch.load(model_path, map_location="cpu", weights_only=False)
     model.eval()
 
     # Extract metadata
