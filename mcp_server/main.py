@@ -3,7 +3,7 @@ import torch
 import tempfile
 import os
 
-from context import ModelContext
+from mcp_server.context import ModelContext
 
 app = FastAPI()
 
@@ -18,7 +18,7 @@ async def upload_model(
         model_path = tmp.name
 
     # Load PyTorch model
-    loaded_model = torch.load(model_path, map_location="cpu")
+    loaded_model = torch.load(model_path, map_location="cpu",weights_only=False)
     loaded_model.eval()
 
     # Model name (best-effort)
