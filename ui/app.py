@@ -12,6 +12,9 @@ import pandas as pd
 import json
 from pathlib import Path
 import time
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.metrics import measure_latency, get_cpu_memory_mb, get_gpu_util
 
 
 MCP_SERVER_URL = "http://localhost:8000"
@@ -19,7 +22,7 @@ MCP_SERVER_URL = "http://localhost:8000"
 
 st.set_page_config(
     page_title="ML Model Profiler",
-    page_icon="🚀",
+    page_icon=" ",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -90,6 +93,30 @@ def check_server_health():
     except:
         return False
 
+def render_local_metrics():
+    """Render local system metrics using utils/metrics.py"""
+    st.subheader("Local System Metrics")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        cpu_mem = get_cpu_memory_mb()
+        st.metric("💾 Memory Usage", f"{cpu_mem:.2f} MB")
+    
+    with col2:
+        gpu_util = get_gpu_util()
+        if gpu_util is not None:
+            st.metric("🎮 GPU Utilization", f"{gpu_util}%")
+        else:
+            st.metric("🎮 GPU Utilization", "N/A")
+    
+    with col3:
+        # Measure UI latency
+        def dummy_fn():
+            pass
+        latency_mean, latency_p95 = measure_latency(dummy_fn, runs=10)
+        st.metric("⚡ UI Latency", f"{latency_mean:.2f} ms", f"P95: {latency_p95:.2f} ms")
+
 def upload_model_to_server(file, model_type, input_shape):
     """Upload model to MCP server"""
     try:
@@ -118,7 +145,7 @@ def run_profiling(config):
         response = requests.post(
             f"{MCP_SERVER_URL}/run-profile",
             json=config,
-            timeout=300  # 5 minutes timeout
+            timeout=300  
         )
         
         if response.status_code == 200:
@@ -159,16 +186,21 @@ def render_header():
 def render_server_status():
     """Render server connection status"""
     with st.sidebar:
-        st.subheader("🔌 Server Status")
+        st.subheader("Server Status")
         if check_server_health():
-            st.success("✅ Connected to MCP Server")
+            st.success("Connected to MCP Server")
         else:
             st.error("❌ MCP Server not reachable")
             st.info(f"Please start the server at {MCP_SERVER_URL}")
+        
+        st.divider()
+        
+        # Local metrics section
+        render_local_metrics()
 
 def render_upload_section():
     """Render model upload section"""
-    st.header("📤 Step 1: Upload Model")
+    st.header("Upload Model")
     
     col1, col2 = st.columns([2, 1])
     
@@ -202,7 +234,7 @@ def render_upload_section():
                 if success:
                     st.session_state.model_uploaded = True
                     st.session_state.model_info = result
-                    st.success("✅ Model uploaded successfully!")
+                    st.success("Model uploaded successfully!")
                     st.json(result)
                     st.rerun()
                 else:
@@ -210,7 +242,7 @@ def render_upload_section():
 
 def render_profiling_section():
     """Render profiling configuration section"""
-    st.header("⚙️ Step 2: Configure & Run Profiling")
+    st.header("Configure & Run Profiling")
     
     col1, col2, col3 = st.columns(3)
     
@@ -267,9 +299,9 @@ def render_profiling_section():
     
     st.divider()
     
-    if st.button("🚀 Start Profiling", key="profile_btn", type="primary"):
+    if st.button("Start Profiling", key="profile_btn", type="primary"):
         if not precision_modes or not batch_sizes or not runtimes:
-            st.error("⚠️ Please select at least one option from each category")
+            st.error("Please select at least one option from each category")
         else:
             with st.spinner("Running profiling... This may take a few minutes."):
                 progress_bar = st.progress(0)
@@ -284,7 +316,7 @@ def render_profiling_section():
                 success, result = run_profiling(config)
                 
                 if success:
-                    st.success("✅ Profiling completed!")
+                    st.success("Profiling completed!")
                     
                     # Fetch results
                     success_res, results = get_results()
@@ -302,7 +334,7 @@ def render_profiling_section():
 
 def render_results_section():
     """Render profiling results"""
-    st.header("📊 Step 3: Profiling Results")
+    st.header("Profiling Results")
     
     results = st.session_state.results
     
@@ -311,7 +343,7 @@ def render_results_section():
         return
     
     # Summary Metrics
-    st.subheader("📈 Performance Overview")
+    st.subheader("Performance Overview")
     
     summary = results.get('summary', {})
     best_latency = summary.get('best_latency', {})
@@ -336,7 +368,7 @@ def render_results_section():
     
     with col3:
         st.metric(
-            "🔥 Best GPU Util",
+            "Best GPU Util",
             f"{best_gpu.get('gpu_util_mean', 0):.1f}%",
             f"{best_gpu.get('runtime', 'N/A')}"
         )
@@ -377,7 +409,7 @@ def render_results_section():
         render_utilization_chart(valid_configs)
     
     # Detailed table
-    st.subheader("📋 Detailed Configuration Results")
+    st.subheader("Detailed Configuration Results")
     render_results_table(valid_configs)
 
 def render_latency_chart(configs):
@@ -409,7 +441,7 @@ def render_latency_chart(configs):
 
 def render_memory_chart(configs):
     """Render memory usage chart"""
-    st.subheader("💾 Memory Usage")
+    st.subheader("Memory Usage")
     
     # Group by precision
     precisions = {}
@@ -438,7 +470,7 @@ def render_memory_chart(configs):
 
 def render_batch_performance_chart(configs):
     """Render batch size performance chart"""
-    st.subheader("📦 Batch Size Performance")
+    st.subheader("Batch Size Performance")
     
     # Group by batch size
     batch_data = {}
@@ -479,7 +511,7 @@ def render_batch_performance_chart(configs):
 
 def render_utilization_chart(configs):
     """Render resource utilization chart"""
-    st.subheader("🔥 Resource Utilization")
+    st.subheader("Resource Utilization")
     
     # Average by runtime
     runtime_data = {}
@@ -546,7 +578,7 @@ def render_results_table(configs):
 
 def render_recommendations_section():
     """Render recommendations"""
-    st.header("💡 Step 4: Optimization Recommendations")
+    st.header("Optimization Recommendations")
     
     recs = st.session_state.recommendations
     
@@ -559,7 +591,7 @@ def render_recommendations_section():
     
     # Bottleneck Analysis
     if bottlenecks:
-        st.subheader("🔍 Bottleneck Analysis")
+        st.subheader("Bottleneck Analysis")
         
         for bottleneck in bottlenecks[:5]:  # Show top 5
             severity = bottleneck.get('severity', 'medium')
@@ -585,7 +617,7 @@ def render_recommendations_section():
     
     # Recommendations
     if recommendations:
-        st.subheader("✨ Actionable Recommendations")
+        st.subheader("Actionable Recommendations")
         
         for i, rec in enumerate(recommendations, 1):
             priority = rec.get('priority', 'medium')
@@ -621,31 +653,27 @@ def render_recommendations_section():
             
             st.write("")
 
-# ============================================================================
-# MAIN APP FLOW
-# ============================================================================
+#main
 
 def main():
     """Main application flow"""
     
-    # Header
     render_header()
     
-    # Server status in sidebar
     render_server_status()
     
     # Step 1: Upload
     if not st.session_state.model_uploaded:
         render_upload_section()
     else:
-        with st.expander("✅ Model Uploaded - Click to view details"):
+        with st.expander("Model Uploaded - Click to view details"):
             st.json(st.session_state.model_info)
         
         # Step 2: Profiling
         if not st.session_state.profiling_done:
             render_profiling_section()
         else:
-            st.success("✅ Profiling Completed")
+            st.success("Profiling Completed")
             
             # Step 3: Results
             render_results_section()
@@ -661,7 +689,7 @@ def main():
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📥 Export Results"):
+                if st.button("Export Results"):
                     st.download_button(
                         label="Download JSON",
                         data=json.dumps(st.session_state.results, indent=2),
@@ -670,12 +698,12 @@ def main():
                     )
             
             with col2:
-                if st.button("🔄 New Profiling"):
+                if st.button("New Profiling"):
                     st.session_state.profiling_done = False
                     st.rerun()
             
             with col3:
-                if st.button("🆕 Upload New Model"):
+                if st.button("Upload New Model"):
                     st.session_state.model_uploaded = False
                     st.session_state.profiling_done = False
                     st.session_state.results = None
