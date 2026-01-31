@@ -1,27 +1,27 @@
 import time
 import psutil
-import numpy as np
+import torch
 
 def measure_latency(fn, runs=20):
-    times = []
+    timings = []
     for _ in range(runs):
-        start = time.time()
+        start = time.perf_counter()
         fn()
-        end = time.time()
-        times.append((end - start) * 1000)  # ms
-    return np.mean(times), np.percentile(times, 95)
+        end = time.perf_counter()
+        timings.append((end - start) * 1000)  # ms
+    timings.sort()
+    avg = sum(timings) / len(timings)
+    p95 = timings[int(0.95 * len(timings)) - 1]
+    return avg, p95
+
 
 def get_cpu_memory_mb():
     process = psutil.Process()
-    mem_bytes = process.memory_info().rss
-    return mem_bytes / (1024 * 1024)
+    return process.memory_info().rss / (1024 ** 2)
 
-def get_gpu_util():
-    try:
-        import subprocess
-        result = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]
-        )
-        return int(result.decode().strip())
-    except:
+
+def get_gpu_memory_mb():
+    if not torch.cuda.is_available():
         return None
+    return torch.cuda.max_memory_allocated() / (1024 ** 2)
+

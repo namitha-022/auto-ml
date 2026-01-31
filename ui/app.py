@@ -5,7 +5,7 @@ import os
 
 st.set_page_config(page_title="AutoML Performance Profiler")
 
-st.title("⚙️ AutoML Performance Profiler")
+st.title("AutoML Performance Profiler")
 st.write("Upload a PyTorch model to analyze its performance.")
 
 uploaded_file = st.file_uploader(
@@ -46,12 +46,27 @@ if uploaded_file is not None:
             st.subheader("ONNX Conversion Status")
 
             if result.get("onnx_export"):
-                st.success("✅ ONNX export successful")
+                st.success("ONNX export successful")
             else:
-                st.warning("❌ ONNX export failed")
+                st.warning("ONNX export failed")
                 if result.get("onnx_message"):
                     st.code(result["onnx_message"])
         else:
             st.error("Failed to process model")
 
     os.remove(model_path)
+
+st.subheader("⚡ Run Performance Profiling")
+
+if st.button("Run Profiling"):
+    with st.spinner("Profiling model..."):
+        response = requests.post(
+            "http://localhost:8000/run-profile"
+        )
+
+    if response.status_code == 200:
+        profiling_data = response.json()["profiling_results"]
+        st.subheader("Profiling Results")
+        st.json(profiling_data)
+    else:
+        st.error("Profiling failed")

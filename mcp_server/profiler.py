@@ -1,77 +1,129 @@
 import torch
-import numpy as np
-from utils.metrics import (
-    measure_latency,
-    get_cpu_memory_mb,
-    get_gpu_util
-)
+from utils.metrics import measure_latency, get_cpu_memory_mb, get_gpu_memory_mb
 import onnxruntime as ort
+import numpy as np
 
-def profile_model(model_context):
+def profile_pytorch(
+    model,
+    input_shape,
+    batch_size=1,
+    precision="FP32",
+    device="cpu"
+):
+    model = model.to(device)
+    model.eval()
+
+    if precision == "FP16":
+        model = model.half()
+
+    dummy_input = torch.randn(
+        batch_size, *input_shape[1:],
+        device=device
+    )
+
+    if precision == "FP16":
+        dummy_input = dummy_input.half()
+
+    # Warm-up
+    with torch.no_grad():
+        for _ in range(5):
+            _ = model(dummy_input)
+
+    # Reset GPU stats
+    if device == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    # Timed run
+    with torch.no_grad():
+        avg_latency, p95_latency = measure_latency(
+            lambda: model(dummy_input)
+        )
+
+    memory_mb = (
+        get_gpu_memory_mb() if device == "cuda"
+        else get_cpu_memory_mb()
+    )
+
+    return {
+        "runtime": "PyTorch",
+        "precision": precision,
+        "batch": batch_size,
+        "latency_ms": round(avg_latency, 2),
+        "p95_latency_ms": round(p95_latency, 2),
+        "memory_mb": round(memory_mb, 2),
+        "gpu_util": None  # optional later
+    }
+def profile_onnx(
+    session,
+    input_shape,
+    batch_size=1,
+    precision="FP32"
+):
+    input_name = session.get_inputs()[0].name
+
+    dummy_input = np.random.randn(
+        batch_size, *input_shape[1:]
+    ).astype(
+        np.float16 if precision == "FP16" else np.float32
+    )
+
+    # Warm-up
+    for _ in range(5):
+        session.run(None, {input_name: dummy_input})
+
+    avg_latency, p95_latency = measure_latency(
+        lambda: session.run(None, {input_name: dummy_input})
+    )
+
+    memory_mb = get_cpu_memory_mb()
+
+    return {
+        "runtime": "ONNX",
+        "precision": precision,
+        "batch": batch_size,
+        "latency_ms": round(avg_latency, 2),
+        "p95_latency_ms": round(p95_latency, 2),
+        "memory_mb": round(memory_mb, 2),
+        "gpu_util": None
+    }
+def run_full_profile(
+    model,
+    onnx_session,
+    input_shape,
+    device="cpu"
+):
     results = []
 
-    input_shape = model_context["input_shape"]
-    model_path = model_context["model_path"]
-    onnx_path = model_context.get("onnx_path")
-    providers = model_context.get("execution_providers", [])
+    for batch in [1, 4]:
+        results.append(
+            profile_pytorch(
+                model,
+                input_shape,
+                batch_size=batch,
+                precision="FP32",
+                device=device
+            )
+        )
 
-    runtimes = ["pytorch"]
-    if onnx_path:
-        runtimes.append("onnx")
+        if device == "cuda":
+            results.append(
+                profile_pytorch(
+                    model,
+                    input_shape,
+                    batch_size=batch,
+                    precision="FP16",
+                    device=device
+                )
+            )
 
-    precisions = ["FP32", "FP16"]
-    batch_sizes = [1, 4]
-
-    for runtime in runtimes:
-        for precision in precisions:
-            for batch in batch_sizes:
-
-                shape = (batch, *input_shape[1:])
-                dummy_input = torch.randn(shape)
-
-                # ----- PyTorch Runtime -----
-                if runtime == "pytorch":
-                    model = torch.load(model_path, map_location="cpu")
-                    model.eval()
-
-                    if precision == "FP16":
-                        model = model.half()
-                        dummy_input = dummy_input.half()
-
-                    def run():
-                        with torch.no_grad():
-                            model(dummy_input)
-
-                # ----- ONNX Runtime -----
-                else:
-                    session = ort.InferenceSession(
-                        onnx_path,
-                        providers=providers
-                    )
-
-                    input_name = session.get_inputs()[0].name
-                    input_np = dummy_input.numpy()
-
-                    def run():
-                        session.run(None, {input_name: input_np})
-
-                # 🔥 Warm‑up
-                for _ in range(5):
-                    run()
-
-                # ⏱ Measure
-                avg_latency, p95_latency = measure_latency(run)
-                memory_mb = get_cpu_memory_mb()
-                gpu_util = get_gpu_util()
-
-                results.append({
-                    "runtime": runtime.upper(),
-                    "precision": precision,
-                    "batch": batch,
-                    "latency_ms": round(avg_latency, 2),
-                    "p95_latency_ms": round(p95_latency, 2),
-                    "memory_mb": round(memory_mb, 2),
-                    "gpu_util": gpu_util
-                })
+        if onnx_session is not None:
+            results.append(
+                profile_onnx(
+                    onnx_session,
+                    input_shape,
+                    batch_size=batch,
+                    precision="FP32"
+                )
+            )
 
     return results
